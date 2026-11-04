@@ -1,0 +1,10 @@
+.git
+.github
+**/node_modules
+**/dist
+**/*.zip
+data
+coverage.out
+.env
+.env.*
+!.env.example

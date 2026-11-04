@@ -1,0 +1,15 @@
+{
+  "name": "avenlytic-web",
+  "version": "0.4.1",
+  "private": true,
+  "type": "module",
+  "scripts": {"dev": "vite --host 0.0.0.0", "build": "vite build"},
+  "dependencies": {
+    "@vitejs/plugin-vue": "6.0.10",
+    "vite": "8.3.5",
+    "typescript": "7.0.2",
+    "vue": "3.5.44",
+    "vue-router": "latest",
+    "vue-i18n": "latest"
+  }
+}

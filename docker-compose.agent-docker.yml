@@ -1,0 +1,20 @@
+services:
+  agent:
+    command:
+      - --server
+      - http://server:9080
+      - --token
+      - ${AGENT_TOKEN:-}
+      - --host-root
+      - /host
+      - --sys-root
+      - /host-sys
+      - --cgroup-root
+      - /host-cgroup
+      - --docker-socket
+      - /run/docker-ro.sock
+    volumes:
+      - type: bind
+        source: ${DOCKER_SOCKET_PROXY_PATH:?Set DOCKER_SOCKET_PROXY_PATH to the restricted proxy socket path}
+        target: /run/docker-ro.sock
+        read_only: true

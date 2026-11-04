@@ -1,0 +1,23 @@
+[Unit]
+Description=Avenlytic Linux Monitoring Agent
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=avenlytic-agent
+Group=avenlytic-agent
+EnvironmentFile=/etc/avenlytic/agent.env
+ExecStart=/usr/local/bin/avenlytic-agent --server ${AVENLYTIC_SERVER} --token ${AVENLYTIC_TOKEN} --interval ${AVENLYTIC_INTERVAL}
+Restart=always
+RestartSec=5
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+
+[Install]
+WantedBy=multi-user.target

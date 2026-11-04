@@ -1,0 +1,21 @@
+[Unit]
+Description=Avenlytic Monitoring Server
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=avenlytic
+Group=avenlytic
+EnvironmentFile=/etc/avenlytic/server.env
+ExecStart=/usr/local/bin/avenlytic-server --listen ${AVENLYTIC_LISTEN} --token ${AVENLYTIC_TOKEN} --data ${AVENLYTIC_DATA}
+Restart=on-failure
+RestartSec=3
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/var/lib/avenlytic
+
+[Install]
+WantedBy=multi-user.target

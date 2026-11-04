@@ -1,0 +1,70 @@
+name: avenlytic
+services:
+  server:
+    image: ${AVENLYTIC_IMAGE:-ghcr.io/${GITHUB_REPOSITORY:-avenlytic/avenlytic}:latest}
+    pull_policy: missing
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: avenlytic-server
+    restart: unless-stopped
+    command: ["--listen", ":9080", "--data", "/data/avenlytic.db"]
+    environment:
+      TZ: ${TZ:-UTC}
+      AGENT_TOKEN: ${AGENT_TOKEN:-}
+    ports:
+      - "${AVENLYTIC_PORT:-9080}:9080"
+    volumes:
+      - avenlytic-data:/data
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    read_only: true
+    tmpfs:
+      - /tmp:size=16m,noexec,nosuid,nodev
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://127.0.0.1:9080/healthz"]
+      interval: 30s
+      timeout: 3s
+      retries: 3
+      start_period: 10s
+  agent:
+    profiles: ["host-agent"]
+    image: ${AVENLYTIC_AGENT_IMAGE:-ghcr.io/${GITHUB_REPOSITORY:-avenlytic/avenlytic}-agent:latest}
+    pull_policy: missing
+    build:
+      context: .
+      dockerfile: Dockerfile.agent
+    container_name: avenlytic-agent
+    restart: unless-stopped
+    command: ["--server", "http://server:9080", "--token", "${AGENT_TOKEN:-}", "--host-root", "/host", "--sys-root", "/host-sys"]
+    environment:
+      TZ: ${TZ:-UTC}
+    depends_on:
+      server:
+        condition: service_healthy
+    volumes:
+      - type: bind
+        source: /
+        target: /host
+        read_only: true
+        bind:
+          propagation: rslave
+      - type: bind
+        source: /proc
+        target: /host/proc
+        read_only: true
+      - type: bind
+        source: /sys
+        target: /host-sys
+        read_only: true
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    read_only: true
+    tmpfs:
+      - /tmp:size=16m,noexec,nosuid,nodev
+volumes:
+  avenlytic-data:
