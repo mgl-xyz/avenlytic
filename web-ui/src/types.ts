@@ -43,17 +43,6 @@ export type HostSnapshot = {
   hardware?: {
     sensors?: { name: string; kind: string; value: number; unit: string; critical?: number }[]
   }
-  cgroup?: {
-    version: string
-    cpu_usage_usec?: number
-    cpu_quota_cores?: number
-    memory_usage_bytes?: number
-    memory_limit_bytes?: number
-    pids_current?: number
-    pids_limit?: number
-    io_read_bytes?: number
-    io_write_bytes?: number
-  }
   memory?: {
     usage_percent?: number
     total_bytes?: number

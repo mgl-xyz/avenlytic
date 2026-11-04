@@ -19,7 +19,6 @@ Avenlytic 使用 Go 开发，采用「轻量 Agent + 中心 Server + Web 控制�
   - CPU 使用率、逻辑核心数。
   - CPU 型号/厂商、可用时的当前/最小/最大频率（`/proc/cpuinfo`、sysfs cpufreq）。
   - 可用的 hwmon 温度和风扇传感器。
-  - 可选读取 cgroup v1/v2 挂载根目录的 CPU、内存、PID 和块 I/O 控制器统计。
   - 内存总量、已用、可用及使用率。
   - 1/5/15 分钟 Load Average、系统运行时间。
   - 网络接口 RX/TX 累计字节。
@@ -107,7 +106,7 @@ docker compose --profile host-agent up -d --build
 docker compose logs -f agent
 ```
 
-此 profile 使用单独构建的轻量 Agent 镜像，将宿主 `/`、`/proc`、`/sys`、`/sys/fs/cgroup` 分别只读挂载到 `/host`、`/host/proc`、`/host-sys`、`/host-cgroup`，并传入 `--host-root /host --sys-root /host-sys --cgroup-root /host-cgroup`。Agent 以非 root 用户运行、移除全部 capabilities、启用只读容器根文件系统和 `no-new-privileges`；**不需要 privileged、`pid: host` 或 `network_mode: host`**。挂载表和网络接口从宿主 `/proc/1` 视图读取。除基础宿主指标外，还会采集可用的 CPU 型号/频率、hwmon/thermal 温度、风扇转速及 cgroup v1/v2 根目录 CPU、内存、PID、块 I/O 统计。Docker 递归只读子挂载要求 Linux Kernel 5.12 或更新版本；旧内核上宿主根目录下的子挂载可能仍可写，不要在旧内核上启用该 profile，建议在宿主直接运行 Agent。受 `hidepid`、LSM、rootless Docker 或宿主挂载可见性影响时，部分数据也可能缺失。该 profile 仅支持原生 Linux Docker；Docker Desktop 不提供通用的原生 Windows/macOS `/proc` 挂载，不能用它采集桌面宿主。
+此 profile 使用单独构建的轻量 Agent 镜像，将宿主 `/`、`/proc`、`/sys` 分别只读挂载到 `/host`、`/host/proc`、`/host-sys`，并传入 `--host-root /host --sys-root /host-sys`。Agent 以非 root 用户运行、移除全部 capabilities、启用只读容器根文件系统和 `no-new-privileges`；**不需要 privileged、`pid: host` 或 `network_mode: host`**。挂载表和网络接口从宿主 `/proc/1` 视图读取。除基础宿主指标外，还会从 sysfs 采集可用的 CPU 型号/频率、hwmon/thermal 温度和风扇转速。Docker 递归只读子挂载要求 Linux Kernel 5.12 或更新版本；旧内核上宿主根目录下的子挂载可能仍可写，不要在旧内核上启用该 profile，建议在宿主直接运行 Agent。受 `hidepid`、LSM、rootless Docker 或宿主挂载可见性影响时，部分数据也可能缺失。该 profile 仅支持原生 Linux Docker；Docker Desktop 不提供通用的原生 Windows/macOS `/proc` 挂载，不能用它采集桌面宿主。
 
 只读挂载仍会让 Agent 进程读取宿主根目录下该 UID 有权读取的文件；若不接受此访问范围，建议直接在宿主运行 Agent/systemd。宿主登录失败日志、软件包清单、系统更新检查和 systemd journal 查询不由容器 Agent 提供，请在宿主直接运行 Agent。Docker 容器清单则是另一个可选功能，需显式提供受限 Docker Socket 代理；可用 `docker-compose.agent-docker.yml` overlay 将代理 Socket 只读挂给 Agent，详见 [Docker 部署文档](docs/DEPLOYMENT_DOCKER.md)。Docker Socket 的文件只读挂载不限制 API 权限，直接挂载宿主 Docker Socket 相当于授予 Docker daemon 高权限访问。
 
@@ -152,7 +151,6 @@ Agent：
 | `--docker-socket` | 空（关闭） | Linux Docker Engine Unix Socket 或受限 Socket 代理路径 |
 | `--host-root` | 空（关闭） | Linux 容器 Agent 的宿主根目录挂载路径；同时要求其下有宿主 `/proc` |
 | `--sys-root` | `/sys` 或 `<host-root>/sys` | sysfs 根目录；用于 CPU 频率和 hwmon 传感器 |
-| `--cgroup-root` | `/sys/fs/cgroup` 或 `<host-root>/sys/fs/cgroup` | cgroup v1/v2 根挂载点；可用时采集控制器统计 |
 
 Server：
 

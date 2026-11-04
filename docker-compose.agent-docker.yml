@@ -9,8 +9,6 @@ services:
       - /host
       - --sys-root
       - /host-sys
-      - --cgroup-root
-      - /host-cgroup
       - --docker-socket
       - /run/docker-ro.sock
     volumes:

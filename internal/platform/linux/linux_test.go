@@ -62,18 +62,12 @@ func TestHostRootCollectionUsesHostPaths(t *testing.T) {
 	}
 	sysRoot := root + "/sys"
 	hwmon := sysRoot + "/class/hwmon/hwmon0"
-	cgroupRoot := sysRoot + "/fs/cgroup"
 	if err := os.MkdirAll(hwmon, 0o755); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.MkdirAll(cgroupRoot, 0o755); err != nil {
-		t.Fatal(err)
-	}
 	for path, content := range map[string]string{
-		hwmon + "/name":                    "coretemp\n",
-		hwmon + "/temp1_input":             "42000\n",
-		cgroupRoot + "/cgroup.controllers": "cpu memory pids\n",
-		cgroupRoot + "/memory.current":     "4096\n",
+		hwmon + "/name":        "coretemp\n",
+		hwmon + "/temp1_input": "42000\n",
 	} {
 		if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
 			t.Fatal(err)
@@ -141,9 +135,8 @@ func TestHostRootCollectionUsesHostPaths(t *testing.T) {
 	if snapshot.CPU.Model != "Test CPU 3000" || snapshot.CPU.Vendor != "GenuineTest" {
 		t.Fatalf("snapshot did not include host CPU identity: %+v", snapshot.CPU)
 	}
-	if snapshot.Hardware == nil || len(snapshot.Hardware.Sensors) != 1 || snapshot.Cgroup == nil ||
-		snapshot.Cgroup.Version != "v2" || snapshot.Cgroup.MemoryUsageBytes == nil || *snapshot.Cgroup.MemoryUsageBytes != 4096 {
-		t.Fatalf("snapshot did not include host sysfs and cgroup metrics: hardware=%+v cgroup=%+v", snapshot.Hardware, snapshot.Cgroup)
+	if snapshot.Hardware == nil || len(snapshot.Hardware.Sensors) != 1 {
+		t.Fatalf("snapshot did not include host sysfs metrics: hardware=%+v", snapshot.Hardware)
 	}
 }
 
@@ -227,103 +220,6 @@ func TestCollectHardwareReportsNoSensors(t *testing.T) {
 	}
 	if hardware != nil {
 		t.Fatalf("expected no hardware sensor inventory, got %+v", hardware)
-	}
-}
-
-func TestCollectCgroupV2(t *testing.T) {
-	root := t.TempDir()
-	for path, content := range map[string]string{
-		root + "/cgroup.controllers": "cpu memory pids\n",
-		root + "/cpu.stat":           "usage_usec 123456\nuser_usec 100000\n",
-		root + "/cpu.max":            "200000 100000\n",
-		root + "/memory.current":     "4096\n",
-		root + "/memory.max":         "8192\n",
-		root + "/pids.current":       "5\n",
-		root + "/pids.max":           "100\n",
-		root + "/io.stat":            "8:0 rbytes=1024 wbytes=2048 rios=1 wios=2\n8:16 rbytes=512 wbytes=256\n",
-	} {
-		if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
-			t.Fatal(err)
-		}
-	}
-	cgroup, err := collectCgroup(root)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if cgroup == nil || cgroup.Version != "v2" || cgroup.CPUUsageUsec == nil || *cgroup.CPUUsageUsec != 123456 ||
-		cgroup.CPUQuotaCores == nil || *cgroup.CPUQuotaCores != 2 ||
-		cgroup.MemoryUsageBytes == nil || *cgroup.MemoryUsageBytes != 4096 ||
-		cgroup.MemoryLimitBytes == nil || *cgroup.MemoryLimitBytes != 8192 ||
-		cgroup.PIDsCurrent == nil || *cgroup.PIDsCurrent != 5 ||
-		cgroup.PIDsLimit == nil || *cgroup.PIDsLimit != 100 ||
-		cgroup.IOReadBytes == nil || *cgroup.IOReadBytes != 1536 ||
-		cgroup.IOWriteBytes == nil || *cgroup.IOWriteBytes != 2304 {
-		t.Fatalf("unexpected cgroup v2 stats: %+v", cgroup)
-	}
-}
-
-func TestCollectCgroupV1SeparateCPUControllers(t *testing.T) {
-	root := t.TempDir()
-	for _, path := range []string{root + "/cpu", root + "/cpuacct", root + "/blkio"} {
-		if err := os.MkdirAll(path, 0o755); err != nil {
-			t.Fatal(err)
-		}
-	}
-	for path, content := range map[string]string{
-		root + "/cpu/cpu.cfs_quota_us":                  "25000\n",
-		root + "/cpu/cpu.cfs_period_us":                 "100000\n",
-		root + "/cpuacct/cpuacct.usage":                 "1000000\n",
-		root + "/blkio/blkio.throttle.io_service_bytes": "8:0 Read 1024\n8:0 Write 2048\nTotal Read 1024\nTotal Write 2048\n",
-	} {
-		if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
-			t.Fatal(err)
-		}
-	}
-	cgroup, err := collectCgroup(root)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if cgroup == nil || cgroup.CPUQuotaCores == nil || *cgroup.CPUQuotaCores != 0.25 ||
-		cgroup.CPUUsageUsec == nil || *cgroup.CPUUsageUsec != 1000 ||
-		cgroup.IOReadBytes == nil || *cgroup.IOReadBytes != 1024 ||
-		cgroup.IOWriteBytes == nil || *cgroup.IOWriteBytes != 2048 {
-		t.Fatalf("unexpected separate cgroup v1 CPU controllers: %+v", cgroup)
-	}
-}
-
-func TestCollectCgroupV1(t *testing.T) {
-	root := t.TempDir()
-	cpuRoot, memoryRoot, pidsRoot := root+"/cpu,cpuacct", root+"/memory", root+"/pids"
-	for _, path := range []string{cpuRoot, memoryRoot, pidsRoot} {
-		if err := os.MkdirAll(path, 0o755); err != nil {
-			t.Fatal(err)
-		}
-	}
-	for path, content := range map[string]string{
-		cpuRoot + "/cpuacct.usage":            "2500000\n",
-		cpuRoot + "/cpu.cfs_quota_us":         "50000\n",
-		cpuRoot + "/cpu.cfs_period_us":        "100000\n",
-		memoryRoot + "/memory.usage_in_bytes": "4096\n",
-		memoryRoot + "/memory.limit_in_bytes": "8192\n",
-		pidsRoot + "/pids.current":            "3\n",
-		pidsRoot + "/pids.max":                "max\n",
-		root + "/blkio.io_service_bytes":      "8:0 Read 4096\n8:0 Write 8192\n",
-	} {
-		if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
-			t.Fatal(err)
-		}
-	}
-	cgroup, err := collectCgroup(root)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if cgroup == nil || cgroup.Version != "v1" || cgroup.CPUUsageUsec == nil || *cgroup.CPUUsageUsec != 2500 ||
-		cgroup.CPUQuotaCores == nil || *cgroup.CPUQuotaCores != 0.5 ||
-		cgroup.MemoryLimitBytes == nil || *cgroup.MemoryLimitBytes != 8192 ||
-		cgroup.PIDsCurrent == nil || *cgroup.PIDsCurrent != 3 || cgroup.PIDsLimit != nil ||
-		cgroup.IOReadBytes == nil || *cgroup.IOReadBytes != 4096 ||
-		cgroup.IOWriteBytes == nil || *cgroup.IOWriteBytes != 8192 {
-		t.Fatalf("unexpected cgroup v1 stats: %+v", cgroup)
 	}
 }
 

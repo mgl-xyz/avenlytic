@@ -73,21 +73,6 @@ const emit = defineEmits<{ (event: 'close'): void }>()
         </div>
       </template>
 
-      <template v-if="selectedHost.snapshot.cgroup">
-        <h3>{{ t('Cgroup 资源') }} · {{ selectedHost.snapshot.cgroup.version }}</h3>
-        <div class="detail-stats">
-          <Card class="detail-stat"><small>{{ t('Cgroup CPU 时间') }}</small><b>{{ selectedHost.snapshot.cgroup.cpu_usage_usec === undefined ? '—' : `${(selectedHost.snapshot.cgroup.cpu_usage_usec / 1000000).toFixed(2)} s` }}</b></Card>
-          <Card class="detail-stat"><small>{{ t('CPU 配额') }}</small><b>{{ selectedHost.snapshot.cgroup.cpu_quota_cores === undefined ? '—' : `${selectedHost.snapshot.cgroup.cpu_quota_cores} ${t('核心')}` }}</b></Card>
-          <Card class="detail-stat"><small>{{ t('Cgroup 内存用量') }}</small><b>{{ fmtBytes(selectedHost.snapshot.cgroup.memory_usage_bytes) }}</b></Card>
-          <Card class="detail-stat"><small>{{ t('Cgroup 内存限制') }}</small><b>{{ fmtBytes(selectedHost.snapshot.cgroup.memory_limit_bytes) }}</b></Card>
-          <Card class="detail-stat"><small>{{ t('Cgroup 进程数') }}</small><b>{{ selectedHost.snapshot.cgroup.pids_current ?? '—' }}</b></Card>
-          <Card class="detail-stat"><small>{{ t('Cgroup 进程限制') }}</small><b>{{ selectedHost.snapshot.cgroup.pids_limit ?? '—' }}</b></Card>
-          <Card class="detail-stat"><small>{{ t('Cgroup 磁盘读取累计') }}</small><b>{{ fmtBytes(selectedHost.snapshot.cgroup.io_read_bytes) }}</b></Card>
-          <Card class="detail-stat"><small>{{ t('Cgroup 磁盘写入累计') }}</small><b>{{ fmtBytes(selectedHost.snapshot.cgroup.io_write_bytes) }}</b></Card>
-        </div>
-        <p class="security-note">{{ t('Cgroup 根目录说明') }}</p>
-      </template>
-
       <h3>{{ t('系统负载') }}</h3>
       <div class="detail-stats detail-stats--load">
         <Card class="detail-stat"><small>{{ t('1 分钟') }}</small><b>{{ selectedHost.snapshot.load?.one?.toFixed(2) ?? '—' }}</b></Card>

@@ -22,7 +22,6 @@ Avenlytic is a Go-based host monitoring system designed around a small outbound-
   - CPU usage and logical core count.
   - CPU model/vendor and available current/min/max frequency from `/proc/cpuinfo` and sysfs cpufreq.
   - Available hwmon temperature and fan sensors.
-  - Optional CPU, memory, PID, and block-I/O controller stats from cgroup v1/v2 mount roots.
   - Memory total/used/available and usage percentage.
   - 1/5/15-minute load averages and uptime.
   - Network interface RX/TX byte counters.
@@ -101,7 +100,7 @@ The agent initiates the connection. No inbound port needs to be opened on monito
 
 To enable read-only Docker monitoring, explicitly pass a Unix socket path, for example `--docker-socket /run/docker-ro.sock`. The console's **Docker containers** page shows container state, image, ports, creation time, and available resource usage. Docker socket access is highly privileged even when the Agent only sends GET requests; use a restricted Docker API proxy that allows only the required read endpoints. A read-only filesystem mount of the Docker socket does **not** prevent write API calls.
 
-The default Docker Compose setup runs only the Server; a container's default `/proc` and filesystem describe the container, not the host. To collect host metrics in a container, set the console-generated `AGENT_TOKEN` in `.env` and run `docker compose --profile host-agent up -d --build`. This profile read-only mounts host `/`, `/proc`, `/sys`, and `/sys/fs/cgroup` at `/host`, `/host/proc`, `/host-sys`, and `/host-cgroup`, then runs the non-root Agent with `--host-root`, `--sys-root`, and `--cgroup-root`. Mount/network namespace-sensitive views are read from host `/proc/1`; the Agent needs no privileged mode, host PID namespace, host network, or added capabilities. It collects available CPU identity/frequency, hwmon/thermal temperatures, fan speeds, and cgroup v1/v2 root CPU, memory, PID, and block-I/O stats. Recursive read-only bind mounts require Linux kernel 5.12 or later; use a native host Agent on older kernels. The host mount grants read access to host files that the container UID can already read; if this is too broad, run the Agent directly on the host. Host login-failure logs, package inventory, update checks, and systemd journal collection are not available in containerized host-root mode. Docker Desktop does not provide a generic native Windows/macOS `/proc` mount, so it cannot collect those desktop hosts. See [Docker deployment](docs/DEPLOYMENT_DOCKER.md) for permissions and limitations.
+The default Docker Compose setup runs only the Server; a container's default `/proc` and filesystem describe the container, not the host. To collect host metrics in a container, set the console-generated `AGENT_TOKEN` in `.env` and run `docker compose --profile host-agent up -d --build`. This profile read-only mounts host `/`, `/proc`, and `/sys` at `/host`, `/host/proc`, and `/host-sys`, then runs the non-root Agent with `--host-root` and `--sys-root`. Mount/network namespace-sensitive views are read from host `/proc/1`; the Agent needs no privileged mode, host PID namespace, host network, or added capabilities. It collects available CPU identity/frequency, hwmon/thermal temperatures and fan speeds from sysfs. Recursive read-only bind mounts require Linux kernel 5.12 or later; use a native host Agent on older kernels. The host mount grants read access to host files that the container UID can already read; if this is too broad, run the Agent directly on the host. Host login-failure logs, package inventory, update checks, and systemd journal collection are not available in containerized host-root mode. Docker Desktop does not provide a generic native Windows/macOS `/proc` mount, so it cannot collect those desktop hosts. See [Docker deployment](docs/DEPLOYMENT_DOCKER.md) for permissions and limitations.
 
 ### 4. Configure alerts and notifications
 
@@ -125,7 +124,6 @@ The default Docker Compose setup runs only the Server; a container's default `/p
 | `--docker-socket` | empty (disabled) | Linux Docker Engine Unix socket or restricted socket-proxy path |
 | `--host-root` | empty (disabled) | Linux host root mount path for containerized collection; host `/proc` must be mounted below it |
 | `--sys-root` | `/sys` or `<host-root>/sys` | Linux sysfs root for CPU frequency and hardware sensors |
-| `--cgroup-root` | `/sys/fs/cgroup` or `<host-root>/sys/fs/cgroup` | cgroup v1/v2 root mount for controller statistics |
 
 ### Server flags
 

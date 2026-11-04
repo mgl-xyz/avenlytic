@@ -2,8 +2,8 @@
 
 ## Unreleased
 
-- Extend Linux host collection with CPU model/vendor/frequency, hwmon and thermal-zone temperatures/fan speeds, and cgroup v1/v2 CPU, memory, PID, and block-I/O controller statistics.
-- Add explicit `--sys-root` and `--cgroup-root` mounts to container Agent deployments and surface the collected data in host details.
+- Extend Linux host collection with CPU model/vendor/frequency and hwmon/thermal-zone temperature and fan sensors.
+- Add explicit `--sys-root` support to container Agent deployments and surface hardware sensor data in host details.
 
 ## 0.4.1 — Developer workflow and console UX
 
