@@ -6,7 +6,7 @@ RUN go mod download
 COPY . .
 RUN CGO_ENABLED=0 GOOS=linux go build -trimpath -ldflags="-s -w" -o /out/avenlytic-agent ./cmd/agent
 
-FROM alpine:3.23
+FROM alpine:3.24
 RUN apk add --no-cache ca-certificates tzdata && addgroup -S avenlytic && adduser -S -G avenlytic -u 10001 avenlytic && mkdir -p /host/proc /host-sys
 COPY --from=build /out/avenlytic-agent /usr/local/bin/avenlytic-agent
 USER avenlytic

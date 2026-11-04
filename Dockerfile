@@ -15,7 +15,7 @@ COPY . .
 COPY --from=frontend /src/cmd/server/web/ ./cmd/server/web/
 RUN CGO_ENABLED=0 GOOS=linux go build -trimpath -ldflags="-s -w" -o /out/avenlytic-server ./cmd/server
 
-FROM alpine:3.23
+FROM alpine:3.24
 RUN apk add --no-cache ca-certificates tzdata curl && addgroup -S avenlytic && adduser -S -G avenlytic -u 10001 avenlytic
 WORKDIR /app
 COPY --from=backend /out/avenlytic-server /usr/local/bin/avenlytic-server
