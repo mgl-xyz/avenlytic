@@ -8,7 +8,7 @@
     "@vitejs/plugin-vue": "6.0.10",
     "vite": "8.3.5",
     "typescript": "7.0.2",
-    "vue": "3.5.44",
+    "vue": "3.5.45",
     "vue-router": "latest",
     "vue-i18n": "latest"
   }
