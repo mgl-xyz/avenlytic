@@ -1,11 +1,10 @@
 <script setup lang="ts">
-import { computed, onMounted, reactive, ref, watch } from 'vue'
+import { computed, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { setLocale } from './i18n'
 import { useLiveUpdates } from './composables/useLiveUpdates'
 import { useToast } from './composables/useToast'
-import AuthView from './components/AuthView.vue'
 import AlertRuleModal from './components/AlertRuleModal.vue'
 import NotificationChannelModal from './components/NotificationChannelModal.vue'
 import HostDetailsModal from './components/HostDetailsModal.vue'
@@ -20,6 +19,8 @@ const { locale, t } = useI18n()
 const view = computed(() => String(route.name || 'overview'))
 const initialized=ref(false), logged=ref(false), username=ref(''), busy=ref(false), error=ref('')
 const authResolved=ref(false)
+const apiPending=ref(false)
+let apiPendingCount=0, apiPendingTimer:ReturnType<typeof setTimeout>|undefined
 const { message: toast, level: toastLevel, notify, pause: pauseToast, resume: resumeToast, clear: clearToast } = useToast()
 const theme=ref(localStorage.getItem('avenlytic.theme')==='dark'?'dark':'light')
 function applyTheme(){document.documentElement.dataset.theme=theme.value;localStorage.setItem('avenlytic.theme',theme.value)}
@@ -42,14 +43,15 @@ const uiGateURL=computed(()=>settings.ui_gate_enabled&&settings.ui_gate_path?`${
 const pageTitle=computed(()=>t(({overview:'基础设施总览',hosts:'服务器管理',containers:'Docker 容器',alerts:'告警中心',rules:'告警规则',channels:'通知通道',settings:'系统设置'} as Record<string,string>)[view.value]||'系统设置'))
 const channelTypes=[['dingtalk','钉钉机器人'],['feishu','飞书机器人'],['wecom','企业微信机器人'],['email','SMTP 邮件'],['slack','Slack Webhook'],['telegram','Telegram Bot'],['webhook','通用 Webhook']]
 const metricTypes=[['cpu.usage_percent','CPU 使用率'],['memory.usage_percent','内存使用率'],['disk.usage_percent','磁盘使用率'],['load.1m','系统负载 1 分钟'],['load.5m','系统负载 5 分钟'],['load.15m','系统负载 15 分钟'],['process.count','进程数量'],['agent.online','服务器在线状态'],['security.login_failures_15m','15 分钟内登录失败次数'],['system.updates_available','可用系统更新数量'],['security.vulnerabilities','公开漏洞数量']]
-async function api(path:string,opts:RequestInit={}){const r=await fetch('/api/v1'+path,{credentials:'same-origin',...opts,headers:{'Content-Type':'application/json',...(opts.headers||{})}});if(!r.ok){const t=await r.text();throw new Error(t||r.statusText)}return r.status===204?null:r.json()}
+async function api(path:string,opts:RequestInit={}){apiPendingCount++;if(apiPendingCount===1)apiPendingTimer=setTimeout(()=>{apiPending.value=true},300);try{const r=await fetch('/api/v1'+path,{credentials:'same-origin',...opts,headers:{'Content-Type':'application/json',...(opts.headers||{})}});if(!r.ok){const t=await r.text();throw new Error(t||r.statusText)}return r.status===204?null:await r.json()}finally{apiPendingCount--;if(apiPendingCount===0){if(apiPendingTimer)clearTimeout(apiPendingTimer);apiPendingTimer=undefined;apiPending.value=false}}}
+onBeforeUnmount(()=>{if(apiPendingTimer)clearTimeout(apiPendingTimer)})
 function setRefreshInterval(v:number){refreshInterval.value=v;localStorage.setItem('avenlytic.refreshInterval',String(v))}
 async function copyAgentToken(){if(!settings.agent_token){notify('请先生成或输入接入密钥','warning');return}try{await navigator.clipboard.writeText(settings.agent_token);notify('接入密钥已复制，请妥善保管','success')}catch{notify('复制失败，请手动复制密钥','error')}}
 function loadCurrentView(){if(logged.value&&!['overview','hosts','alerts'].includes(view.value))void refresh()}
 async function checkAuth(){try{const s=await api('/auth/status');initialized.value=s.initialized;if(!initialized.value){logged.value=false;return}try{const me=await api('/auth/me');username.value=me.username;logged.value=true;loadCurrentView()}catch{logged.value=false}}catch(e:any){error.value=e.message}}
 async function submitSetup(){if(setup.password!==setup.confirm){error.value=t('两次输入的密码不一致');return}busy.value=true;error.value='';try{await api('/auth/setup',{method:'POST',body:JSON.stringify({username:setup.username,password:setup.password})});initialized.value=true;logged.value=true;username.value=setup.username;loadCurrentView()}catch(e:any){error.value=e.message}finally{busy.value=false}}
 async function submitLogin(){busy.value=true;error.value='';try{await api('/auth/login',{method:'POST',body:JSON.stringify(login)});logged.value=true;username.value=login.username;loadCurrentView()}catch(e:any){error.value=e.message}finally{busy.value=false}}
-async function logout(){await api('/auth/logout',{method:'POST'});logged.value=false;login.password=''}
+async function logout(){if(!window.confirm(t('确定退出登录吗？')))return;try{await api('/auth/logout',{method:'POST'});logged.value=false;login.password=''}catch(e:any){notify(t('退出登录失败：')+e.message,'error')}}
 async function refresh(queueIfBusy=true,monitoringOnly=false){if(!logged.value)return;if(monitoringOnly&&!['overview','hosts','containers','alerts'].includes(view.value))return;if(refreshing){if(queueIfBusy)refreshQueued=true;return}refreshing=true;try{switch(view.value){case'overview':{const[h,s,a]=await Promise.all([api('/hosts'),api('/summary'),api('/alerts')]);hosts.value=h.items||[];Object.assign(summary,s);alerts.value=a.items||[];break}case'hosts':case'containers':{const h=await api('/hosts');hosts.value=h.items||[];break}case'alerts':{const a=await api('/alerts');alerts.value=a.items||[];break}case'rules':{const[r,c]=await Promise.all([api('/rules'),api('/channels')]);rules.value=r.items||[];channels.value=c.items||[];break}case'channels':{const[c,d]=await Promise.all([api('/channels'),api('/deliveries')]);channels.value=c.items||[];deliveries.value=d.items||[];break}case'settings':{const st=await api('/settings');settings.offline_after_seconds=st.offline_after_seconds;settings.agent_token_configured=st.agent_token_configured;settings.ui_gate_enabled=st.ui_gate_enabled;break}}}catch(e:any){notify('数据加载失败：'+e.message,'error')}finally{refreshing=false;if(refreshQueued){refreshQueued=false;void refresh()}}}
 function openRule(r?:Rule){Object.assign(ruleForm,r?JSON.parse(JSON.stringify(r)):{id:'',name:'',metric:'memory.usage_percent',message_template:'',operator:'>',threshold:85,duration_seconds:60,severity:'warning',enabled:true,notify_on_recovery:true,channel_ids:[]});showRule.value=true}
 async function saveRule(){try{const saved=await api('/rules',{method:'POST',body:JSON.stringify(ruleForm)});const index=rules.value.findIndex(rule=>rule.id===saved.id);if(index<0)rules.value.push(saved);else rules.value[index]=saved;showRule.value=false;notify('告警规则已保存','success')}catch(e:any){notify(e.message,'error')}}
@@ -162,31 +164,34 @@ onMounted(async()=>{
   document.documentElement.lang=locale.value
   await checkAuth()
   updateRouterAuthState(true, logged.value)
-  authResolved.value=true
   const destination = logged.value && route.name !== 'login' ? String(route.name) : logged.value ? 'overview' : 'login'
   await routeView.replace({ name: destination })
+  authResolved.value=true
 })
 </script>
 <template>
   <RouterView v-slot="{ Component }">
-  <AuthView v-if="!authResolved" :initialized="initialized" :busy="busy" :error="error" :setup="setup" :login="login" :submit-setup="submitSetup" :submit-login="submitLogin" :theme="theme" :toggle-theme="toggleTheme" :locale="locale" :toggle-locale="toggleLocale" />
-  <component :is="Component" v-else-if="view==='login'" v-bind="authProps" />
-  <div v-else-if="logged" class="layout"><aside class="sidebar"><div class="brand"><div class="brand-mark">◉</div><div><b>AVENLYTIC</b><small>{{t("基础设施监控")}}</small></div></div><div class="nav-group"><div class="nav-caption">{{t("监控")}}</div><button v-for="item in [{id:'overview',icon:'◫',name:'总览'},{id:'hosts',icon:'▣',name:'服务器'},{id:'containers',icon:'◧',name:'Docker 容器'},{id:'alerts',icon:'⚑',name:'告警中心'}]" :key="item.id" class="nav" :class="{active:view===item.id}" @click="navigateToView(item.id)"><span>{{item.icon}}</span>{{t(item.name)}}<i v-if="item.id==='alerts'&&summary.alerts">{{summary.alerts}}</i></button></div><div class="nav-group"><div class="nav-caption">{{t("配置管理")}}</div><button v-for="item in [{id:'rules',icon:'⌁',name:'告警规则'},{id:'channels',icon:'↗',name:'通知通道'},{id:'settings',icon:'⚙',name:'系统设置'}]" :key="item.id" class="nav" :class="{active:view===item.id}" @click="navigateToView(item.id)"><span>{{item.icon}}</span>{{t(item.name)}}</button></div><div class="side-bottom"><span class="dot"></span>{{t("主机运行状态一目了然")}}<small></small></div></aside>
-  <main class="main"><header class="topbar"><div><div class="crumb">AVENLYTIC <span>/</span> {{pageTitle}}</div><h1>{{pageTitle}}</h1><p>{{t("实时掌握基础设施运行状态与告警情况。")}}</p></div><div class="top-actions"><button class="appearance-toggle" @click="toggleTheme" :aria-label="t(theme==='light'?'切换深色主题':'切换浅色主题')" :aria-pressed="theme==='dark'">{{theme==='light'?t('深色'):t('浅色')}}</button><button class="appearance-toggle" @click="toggleLocale">{{locale==='zh-CN'?'EN':'中文'}}</button><label class="refresh-control">{{t("断线轮询兜底")}} <DropdownSelect :model-value="refreshInterval" :options="refreshOptions" @update:model-value="setRefreshInterval(Number($event))" /></label><span v-if="eventStreamConnected" class="live"><i></i> {{t("实时推送已连接")}}</span><span v-else-if="refreshInterval>0" class="live manual"><i></i> {{t("SSE 断开，轮询兜底中")}}</span><span v-else class="live manual"><i></i> {{t("实时连接断开")}}</span><button class="icon-button" @click="refresh" :title="t('刷新')">↻</button><button class="user-chip" @click="showPassword=true"><span class="avatar">{{username.slice(0,1).toUpperCase()}}</span><span>{{username}}</span></button><button class="logout" @click="logout">{{t("退出")}}</button></div></header>
-    <Transition name="page" mode="out-in">
-      <div :key="view" class="page-transition-shell">
-        <component
-          :is="Component"
-          v-bind="pageProps"
-          v-on="pageListeners"
-        />
-      </div>
+    <div v-if="apiPending&&!busy" class="request-pending" role="status" aria-live="polite"><i></i>{{t("正在处理请求…")}}</div>
+    <div v-if="!authResolved" class="route-pending" aria-busy="true"></div>
+    <Transition v-else name="route" mode="out-in" appear>
+      <component :is="Component" v-if="view==='login'" key="login" v-bind="authProps" />
+      <div v-else-if="logged" key="workspace" class="layout"><aside class="sidebar"><div class="brand"><div class="brand-mark">◉</div><div><b>AVENLYTIC</b><small>{{t("基础设施监控")}}</small></div></div><div class="nav-group"><div class="nav-caption">{{t("监控")}}</div><button v-for="item in [{id:'overview',icon:'◫',name:'总览'},{id:'hosts',icon:'▣',name:'服务器'},{id:'containers',icon:'◧',name:'Docker 容器'},{id:'alerts',icon:'⚑',name:'告警中心'}]" :key="item.id" class="nav" :class="{active:view===item.id}" @click="navigateToView(item.id)"><span>{{item.icon}}</span>{{t(item.name)}}<i v-if="item.id==='alerts'&&summary.alerts">{{summary.alerts}}</i></button></div><div class="nav-group"><div class="nav-caption">{{t("配置管理")}}</div><button v-for="item in [{id:'rules',icon:'⌁',name:'告警规则'},{id:'channels',icon:'↗',name:'通知通道'},{id:'settings',icon:'⚙',name:'系统设置'}]" :key="item.id" class="nav" :class="{active:view===item.id}" @click="navigateToView(item.id)"><span>{{item.icon}}</span>{{t(item.name)}}</button></div><div class="side-bottom"><span class="dot"></span>{{t("主机运行状态一目了然")}}<small></small></div></aside>
+      <main class="main"><header class="topbar"><div><div class="crumb">AVENLYTIC <span>/</span> {{pageTitle}}</div><h1>{{pageTitle}}</h1><p>{{t("实时掌握基础设施运行状态与告警情况。")}}</p></div><div class="top-actions"><button class="appearance-toggle" @click="toggleTheme" :aria-label="t(theme==='light'?'切换深色主题':'切换浅色主题')" :aria-pressed="theme==='dark'">{{theme==='light'?t('深色'):t('浅色')}}</button><button class="appearance-toggle" @click="toggleLocale">{{locale==='zh-CN'?'EN':'中文'}}</button><label class="refresh-control">{{t("断线轮询兜底")}} <DropdownSelect :model-value="refreshInterval" :options="refreshOptions" @update:model-value="setRefreshInterval(Number($event))" /></label><span v-if="eventStreamConnected" class="live"><i></i> {{t("实时推送已连接")}}</span><span v-else-if="refreshInterval>0" class="live manual"><i></i> {{t("SSE 断开，轮询兜底中")}}</span><span v-else class="live manual"><i></i> {{t("实时连接断开")}}</span><button class="icon-button" @click="refresh" :title="t('刷新')">↻</button><button class="user-chip" @click="showPassword=true"><span class="avatar">{{username.slice(0,1).toUpperCase()}}</span><span>{{username}}</span></button><button class="logout" @click="logout">{{t("退出")}}</button></div></header>
+        <Transition name="page" mode="out-in">
+          <div :key="view" class="page-transition-shell">
+            <component
+              :is="Component"
+              v-bind="pageProps"
+              v-on="pageListeners"
+            />
+          </div>
+        </Transition>
+      </main>
+      <AlertRuleModal :show-rule="showRule" :rule-form="ruleForm" :channels="channels" :metric-types="metricTypes" :save-rule="saveRule" @close="showRule=false" />
+      <NotificationChannelModal :show-channel="showChannel" :channel-form="channelForm" :channel-types="channelTypes" :channel-fields="channelFields" :save-channel="saveChannel" :test-channel="testChannel" @close="closeChannel" />
+      <HostDetailsModal :selected-host="selectedHost" :pct="pct" :fmt-bytes="fmtBytes" :process-state="processState" @close="selectedHost=null" />
+      <PasswordModal :show-password="showPassword" :password-form="passwordForm" :change-password="changePassword" @close="showPassword=false" />
+      <ToastNotice :toast="toast" :toast-level="toastLevel" :pause-toast="pauseToast" :resume-toast="resumeToast" @close="clearToast" /></div>
     </Transition>
-  </main>
-  <AlertRuleModal :show-rule="showRule" :rule-form="ruleForm" :channels="channels" :metric-types="metricTypes" :save-rule="saveRule" @close="showRule=false" />
-  <NotificationChannelModal :show-channel="showChannel" :channel-form="channelForm" :channel-types="channelTypes" :channel-fields="channelFields" :save-channel="saveChannel" :test-channel="testChannel" @close="closeChannel" />
-  <HostDetailsModal :selected-host="selectedHost" :pct="pct" :fmt-bytes="fmtBytes" :process-state="processState" @close="selectedHost=null" />
-  <PasswordModal :show-password="showPassword" :password-form="passwordForm" :change-password="changePassword" @close="showPassword=false" />
-  <ToastNotice :toast="toast" :toast-level="toastLevel" :pause-toast="pauseToast" :resume-toast="resumeToast" @close="clearToast" /></div>
   </RouterView>
 </template>
