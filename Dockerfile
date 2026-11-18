@@ -1,5 +1,5 @@
 # syntax=docker/dockerfile:1
-FROM node:26.13.0-alpine AS frontend
+FROM node:26.13.1-alpine AS frontend
 WORKDIR /src/web-ui
 COPY web-ui/package.json ./package.json
 RUN npm install --no-audit --no-fund
