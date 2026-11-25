@@ -6,7 +6,7 @@ RUN npm install --no-audit --no-fund
 COPY web-ui/ ./
 RUN mkdir -p /src/cmd/server/web && npm run build
 
-FROM golang:1.27.3-alpine AS backend
+FROM golang:1.27.4-alpine AS backend
 WORKDIR /src
 RUN apk add --no-cache ca-certificates git
 COPY go.mod ./
